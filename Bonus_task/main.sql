@@ -1,10 +1,10 @@
 -- ============================================
--- BONUS LABORATORY WORK BANKING TRANSACTION SYSTEM
--- Student Abdrakhman Yeskendir
--- Date 12.12.2025
+-- BONUS LABORATORY WORK: BANKING TRANSACTION SYSTEM
+-- Student: Abdrakhman Yeskendir
+-- Date: 12.12.2025
 -- ============================================
 
--- PART 1 DATABASE SCHEMA CREATION
+-- PART 1: DATABASE SCHEMA CREATION
 -- ============================================
 
 -- Drop existing tables (if any) for clean setup
@@ -26,13 +26,13 @@ CREATE TABLE customers (
     daily_limit_kzt DECIMAL(15,2) DEFAULT 1000000.00
 );
 
--- 2. accounts table
+-- 2. accounts table - FIXED: changed CHECK (balance = 0) to CHECK (balance >= 0)
 CREATE TABLE accounts (
     account_id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES customers(customer_id) ON DELETE CASCADE,
     account_number VARCHAR(34) UNIQUE NOT NULL CHECK (account_number ~ '^KZ[0-9]{2}[A-Z]{4}[0-9]{20}$'),
     currency VARCHAR(3) NOT NULL CHECK (currency IN ('KZT', 'USD', 'EUR', 'RUB')),
-    balance DECIMAL(15,2) DEFAULT 0.00 CHECK (balance = 0),
+    balance DECIMAL(15,2) DEFAULT 0.00 CHECK (balance >= 0),
     is_active BOOLEAN DEFAULT TRUE,
     opened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     closed_at TIMESTAMP
@@ -49,12 +49,12 @@ CREATE TABLE exchange_rates (
     CHECK (from_currency != to_currency)
 );
 
--- 4. transactions table
+-- 4. transactions table - FIXED: changed CHECK (amount  0) to CHECK (amount > 0)
 CREATE TABLE transactions (
     transaction_id SERIAL PRIMARY KEY,
     from_account_id INTEGER REFERENCES accounts(account_id),
     to_account_id INTEGER REFERENCES accounts(account_id),
-    amount DECIMAL(15,2) NOT NULL CHECK (amount  0),
+    amount DECIMAL(15,2) NOT NULL CHECK (amount > 0),
     currency VARCHAR(3) NOT NULL CHECK (currency IN ('KZT', 'USD', 'EUR', 'RUB')),
     exchange_rate DECIMAL(10,6) DEFAULT 1.0,
     amount_kzt DECIMAL(15,2) NOT NULL,
@@ -79,7 +79,7 @@ CREATE TABLE audit_log (
 );
 
 -- ============================================
--- PART 2 SAMPLE DATA INSERTION (Min 10 records each)
+-- PART 2: SAMPLE DATA INSERTION (Min 10 records each)
 -- ============================================
 
 -- Insert customers
@@ -110,15 +110,15 @@ INSERT INTO accounts (customer_id, account_number, currency, balance, is_active)
 (9, 'KZ90123456789012345678', 'KZT', 4000000.00, true),
 (10, 'KZ01234567890123456789', 'KZT', 2000000.00, true);
 
--- Insert exchange rates
+-- Insert exchange rates - FIXED: added : between time values
 INSERT INTO exchange_rates (from_currency, to_currency, rate, valid_from, valid_to) VALUES
-('USD', 'KZT', 450.00, '2024-01-01 000000', NULL),
-('EUR', 'KZT', 500.00, '2024-01-01 000000', NULL),
-('RUB', 'KZT', 5.00, '2024-01-01 000000', NULL),
-('KZT', 'USD', 0.002222, '2024-01-01 000000', NULL),
-('KZT', 'EUR', 0.002000, '2024-01-01 000000', NULL),
-('USD', 'EUR', 0.90, '2024-01-01 000000', NULL),
-('EUR', 'USD', 1.11, '2024-01-01 000000', NULL);
+('USD', 'KZT', 450.00, '2024-01-01 00:00:00', NULL),
+('EUR', 'KZT', 500.00, '2024-01-01 00:00:00', NULL),
+('RUB', 'KZT', 5.00, '2024-01-01 00:00:00', NULL),
+('KZT', 'USD', 0.002222, '2024-01-01 00:00:00', NULL),
+('KZT', 'EUR', 0.002000, '2024-01-01 00:00:00', NULL),
+('USD', 'EUR', 0.90, '2024-01-01 00:00:00', NULL),
+('EUR', 'USD', 1.11, '2024-01-01 00:00:00', NULL);
 
 -- Insert sample transactions
 INSERT INTO transactions (from_account_id, to_account_id, amount, currency, exchange_rate, amount_kzt, type, status, description) VALUES
@@ -129,7 +129,7 @@ INSERT INTO transactions (from_account_id, to_account_id, amount, currency, exch
 (5, NULL, 30000.00, 'KZT', 1.0, 30000.00, 'withdrawal', 'completed', 'ATM withdrawal');
 
 -- ============================================
--- PART 3 AUDIT LOGGING TRIGGER
+-- PART 3: AUDIT LOGGING TRIGGER
 -- ============================================
 
 CREATE OR REPLACE FUNCTION audit_trigger_function()
@@ -157,7 +157,7 @@ AFTER INSERT OR UPDATE OR DELETE ON accounts
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
 
 -- ============================================
--- PART 4 TASK 1 - TRANSACTION MANAGEMENT
+-- PART 4: TASK 1 - TRANSACTION MANAGEMENT (FIXED SYNTAX)
 -- ============================================
 
 CREATE OR REPLACE PROCEDURE process_transfer(
@@ -183,10 +183,9 @@ DECLARE
     v_customer_status VARCHAR(10);
     v_daily_limit DECIMAL(15,2);
     v_error_code INTEGER;
-    v_error_message TEXT;
 BEGIN
     -- Initialize error tracking
-    v_error_code = 0;
+    v_error_code := 0;
     
     -- Start transaction
     BEGIN
@@ -198,7 +197,7 @@ BEGIN
         FOR UPDATE;
         
         IF v_from_account_id IS NULL THEN
-            RAISE EXCEPTION 'ERR001 Source account not found or inactive';
+            RAISE EXCEPTION 'ERR001: Source account not found or inactive';
         END IF;
         
         SELECT account_id, customer_id, currency
@@ -208,7 +207,7 @@ BEGIN
         FOR UPDATE;
         
         IF v_to_account_id IS NULL THEN
-            RAISE EXCEPTION 'ERR002 Destination account not found or inactive';
+            RAISE EXCEPTION 'ERR002: Destination account not found or inactive';
         END IF;
         
         -- Check customer status
@@ -216,19 +215,19 @@ BEGIN
         FROM customers WHERE customer_id = v_from_customer_id;
         
         IF v_customer_status != 'active' THEN
-            RAISE EXCEPTION 'ERR003 Source customer is %', v_customer_status;
+            RAISE EXCEPTION 'ERR003: Source customer is %', v_customer_status;
         END IF;
         
         -- Check sufficient balance
-        IF v_from_balance  p_amount THEN
-            RAISE EXCEPTION 'ERR004 Insufficient funds. Available %, Requested %', 
+        IF v_from_balance < p_amount THEN
+            RAISE EXCEPTION 'ERR004: Insufficient funds. Available: %, Requested: %', 
                            v_from_balance, p_amount;
         END IF;
         
         -- Calculate amount in KZT for daily limit check
         IF p_currency = 'KZT' THEN
-            v_amount_kzt = p_amount;
-            v_exchange_rate = 1.0;
+            v_amount_kzt := p_amount;
+            v_exchange_rate := 1.0;
         ELSE
             -- Get exchange rate
             SELECT rate INTO v_exchange_rate
@@ -238,10 +237,10 @@ BEGIN
                 AND valid_to IS NULL;
             
             IF v_exchange_rate IS NULL THEN
-                RAISE EXCEPTION 'ERR005 Exchange rate not available for % to KZT', p_currency;
+                RAISE EXCEPTION 'ERR005: Exchange rate not available for % to KZT', p_currency;
             END IF;
             
-            v_amount_kzt = p_amount  v_exchange_rate;
+            v_amount_kzt := p_amount * v_exchange_rate;
         END IF;
         
         -- Check daily transaction limit
@@ -251,8 +250,8 @@ BEGIN
             AND status = 'completed'
             AND DATE(created_at) = CURRENT_DATE;
         
-        IF (v_daily_spent + v_amount_kzt)  v_daily_limit THEN
-            RAISE EXCEPTION 'ERR006 Daily limit exceeded. Spent %, Limit %, This transaction %',
+        IF (v_daily_spent + v_amount_kzt) > v_daily_limit THEN
+            RAISE EXCEPTION 'ERR006: Daily limit exceeded. Spent: %, Limit: %, This transaction: %',
                            v_daily_spent, v_daily_limit, v_amount_kzt;
         END IF;
         
@@ -264,7 +263,7 @@ BEGIN
             v_from_account_id, v_to_account_id, p_amount, p_currency,
             v_exchange_rate, v_amount_kzt, 'transfer', 'pending', p_description
         )
-        RETURNING transaction_id INTO v_error_code; -- reuse variable
+        RETURNING transaction_id INTO v_error_code;
         
         -- Handle currency conversion if needed
         IF v_from_currency != v_to_currency THEN
@@ -284,19 +283,19 @@ BEGIN
                     
                 IF v_conversion_rate IS NULL THEN
                     -- Try reverse conversion
-                    SELECT 1rate INTO v_conversion_rate
+                    SELECT 1/rate INTO v_conversion_rate
                     FROM exchange_rates 
                     WHERE from_currency = v_to_currency 
                         AND to_currency = v_from_currency
                         AND valid_to IS NULL;
                         
                     IF v_conversion_rate IS NULL THEN
-                        RAISE EXCEPTION 'ERR007 No exchange rate available from % to %', 
+                        RAISE EXCEPTION 'ERR007: No exchange rate available from % to %', 
                                        v_from_currency, v_to_currency;
                     END IF;
                 END IF;
                 
-                v_converted_amount = p_amount  v_conversion_rate;
+                v_converted_amount := p_amount * v_conversion_rate;
                 
                 -- Update balances
                 UPDATE accounts SET balance = balance - p_amount 
@@ -333,7 +332,7 @@ BEGIN
         -- Commit transaction
         COMMIT;
         
-        RAISE NOTICE 'Transfer completed successfully. Transaction ID %', v_error_code;
+        RAISE NOTICE 'Transfer completed successfully. Transaction ID: %', v_error_code;
         
     EXCEPTION
         WHEN OTHERS THEN
@@ -344,9 +343,9 @@ BEGIN
                     'process_transfer');
             
             -- Update transaction status if record was created
-            IF v_error_code  0 THEN
+            IF v_error_code > 0 THEN
                 UPDATE transactions 
-                SET status = 'failed', description = COALESCE(description, '')  '  Error '  SQLERRM
+                SET status = 'failed', description = COALESCE(description, '') || ' | Error: ' || SQLERRM
                 WHERE transaction_id = v_error_code;
             END IF;
             
@@ -356,10 +355,10 @@ END;
 $$;
 
 -- ============================================
--- PART 5 TASK 2 - VIEWS FOR REPORTING
+-- PART 5: TASK 2 - VIEWS FOR REPORTING (FIXED SYNTAX)
 -- ============================================
 
--- View 1 customer_balance_summary
+-- View 1: customer_balance_summary
 CREATE OR REPLACE VIEW customer_balance_summary AS
 WITH customer_balances AS (
     SELECT 
@@ -375,7 +374,7 @@ WITH customer_balances AS (
         COALESCE(er.rate, 1.0) as exchange_rate_to_kzt,
         CASE 
             WHEN a.currency = 'KZT' THEN a.balance
-            ELSE a.balance  COALESCE(er.rate, 1.0)
+            ELSE a.balance * COALESCE(er.rate, 1.0)
         END as balance_kzt
     FROM customers c
     JOIN accounts a ON c.customer_id = a.customer_id AND a.is_active = TRUE
@@ -398,8 +397,8 @@ SELECT
     daily_limit_kzt,
     ROUND(
         CASE 
-            WHEN daily_limit_kzt  0 THEN 
-                (SUM(balance_kzt)  daily_limit_kzt  100)
+            WHEN daily_limit_kzt > 0 THEN 
+                (SUM(balance_kzt) / daily_limit_kzt * 100)
             ELSE 0 
         END, 2
     ) as limit_utilization_percent,
@@ -407,20 +406,20 @@ SELECT
 FROM customer_balances
 GROUP BY customer_id, full_name, tin, customer_status, daily_limit_kzt;
 
--- View 2 daily_transaction_report
+-- View 2: daily_transaction_report
 CREATE OR REPLACE VIEW daily_transaction_report AS
 WITH daily_stats AS (
     SELECT 
         DATE(created_at) as transaction_date,
         type,
-        COUNT() as transaction_count,
+        COUNT(*) as transaction_count,
         SUM(amount_kzt) as total_volume_kzt,
         AVG(amount_kzt) as avg_amount_kzt,
         SUM(SUM(amount_kzt)) OVER (
             PARTITION BY type 
             ORDER BY DATE(created_at)
         ) as running_total_by_type,
-        SUM(COUNT()) OVER (
+        SUM(COUNT(*)) OVER (
             PARTITION BY type 
             ORDER BY DATE(created_at)
         ) as running_count_by_type
@@ -442,16 +441,16 @@ SELECT
     ) as previous_day_volume,
     ROUND(
         CASE 
-            WHEN LAG(total_volume_kzt, 1) OVER (PARTITION BY type ORDER BY transaction_date)  0
+            WHEN LAG(total_volume_kzt, 1) OVER (PARTITION BY type ORDER BY transaction_date) > 0
             THEN ((total_volume_kzt - LAG(total_volume_kzt, 1) OVER (PARTITION BY type ORDER BY transaction_date)) 
-                   LAG(total_volume_kzt, 1) OVER (PARTITION BY type ORDER BY transaction_date)  100)
+                  / LAG(total_volume_kzt, 1) OVER (PARTITION BY type ORDER BY transaction_date) * 100)
             ELSE NULL
         END, 2
     ) as day_over_day_growth_percent
 FROM daily_stats
 ORDER BY transaction_date DESC, type;
 
--- View 3 suspicious_activity_view (WITH SECURITY BARRIER)
+-- View 3: suspicious_activity_view (WITH SECURITY BARRIER)
 CREATE OR REPLACE VIEW suspicious_activity_view WITH (security_barrier = true) AS
 WITH large_transactions AS (
     SELECT 
@@ -462,7 +461,7 @@ WITH large_transactions AS (
         t.to_account_id,
         'Large Transaction' as flag_type
     FROM transactions t
-    WHERE t.amount_kzt  5000000
+    WHERE t.amount_kzt > 5000000
     AND t.status = 'completed'
 ),
 frequent_transactions AS (
@@ -470,14 +469,14 @@ frequent_transactions AS (
         c.customer_id,
         c.full_name,
         DATE_TRUNC('hour', t.created_at) as hour_window,
-        COUNT() as transaction_count,
+        COUNT(*) as transaction_count,
         'High Frequency' as flag_type
     FROM transactions t
     JOIN accounts a ON t.from_account_id = a.account_id
     JOIN customers c ON a.customer_id = c.customer_id
     WHERE t.status = 'completed'
     GROUP BY c.customer_id, c.full_name, DATE_TRUNC('hour', t.created_at)
-    HAVING COUNT()  10
+    HAVING COUNT(*) > 10
 ),
 rapid_transfers AS (
     SELECT 
@@ -489,8 +488,8 @@ rapid_transfers AS (
         'Rapid Sequential Transfer' as flag_type
     FROM transactions t1
     JOIN transactions t2 ON t1.from_account_id = t2.from_account_id
-        AND t1.transaction_id  t2.transaction_id
-        AND t2.created_at - t1.created_at  INTERVAL '1 minute'
+        AND t1.transaction_id < t2.transaction_id
+        AND t2.created_at - t1.created_at < INTERVAL '1 minute'
     WHERE t1.status = 'completed' AND t2.status = 'completed'
 )
 SELECT 
@@ -527,7 +526,7 @@ SELECT
 FROM rapid_transfers rt;
 
 -- ============================================
--- PART 6 TASK 3 - PERFORMANCE OPTIMIZATION WITH INDEXES
+-- PART 6: TASK 3 - PERFORMANCE OPTIMIZATION WITH INDEXES (FIXED)
 -- ============================================
 
 -- 1. B-tree index on frequently queried columns
@@ -550,14 +549,14 @@ CREATE INDEX idx_accounts_active ON accounts(account_number, balance)
 -- 5. Expression index for case-insensitive email search
 CREATE INDEX idx_customers_email_lower ON customers(LOWER(email));
 
--- 6. GIN index on audit_log JSONB columns
-CREATE INDEX idx_audit_log_jsonb ON audit_log USING gin((old_values  new_values));
+-- 6. GIN index on audit_log JSONB columns - FIXED: changed   to ||
+CREATE INDEX idx_audit_log_jsonb ON audit_log USING gin((old_values || new_values));
 
 -- 7. B-tree index for exchange rates lookup
 CREATE INDEX idx_exchange_rates_lookup ON exchange_rates(from_currency, to_currency, valid_to);
 
 -- ============================================
--- PART 7 TASK 4 - ADVANCED PROCEDURE BATCH PROCESSING
+-- PART 7: TASK 4 - ADVANCED PROCEDURE: BATCH PROCESSING (FIXED)
 -- ============================================
 
 CREATE OR REPLACE PROCEDURE process_salary_batch(
@@ -572,24 +571,24 @@ AS $$
 DECLARE
     v_company_account_id INTEGER;
     v_company_balance DECIMAL(15,2);
-    v_total_batch_amount DECIMAL(15,2) = 0;
+    v_total_batch_amount DECIMAL(15,2) := 0;
     v_payment_record JSONB;
     v_payment_iin VARCHAR(12);
     v_payment_amount DECIMAL(15,2);
     v_payment_description TEXT;
     v_employee_account_id INTEGER;
     v_employee_account_number VARCHAR(34);
-    v_successful INTEGER = 0;
-    v_failed INTEGER = 0;
-    v_failed_json JSONB = '[]'JSONB;
+    v_successful INTEGER := 0;
+    v_failed INTEGER := 0;
+    v_failed_json JSONB := '[]'::JSONB;
     v_lock_id BIGINT;
 BEGIN
     -- Generate advisory lock ID from account number hash
-    v_lock_id = abs(hashtext(p_company_account_number)) % 2147483647;
+    v_lock_id := abs(hashtext(p_company_account_number)) % 2147483647;
     
     -- Acquire advisory lock to prevent concurrent processing
     IF NOT pg_try_advisory_lock(v_lock_id) THEN
-        RAISE EXCEPTION 'ERR101 Batch processing already in progress for this company';
+        RAISE EXCEPTION 'ERR101: Batch processing already in progress for this company';
     END IF;
     
     BEGIN
@@ -600,31 +599,31 @@ BEGIN
         FOR UPDATE;
         
         IF v_company_account_id IS NULL THEN
-            RAISE EXCEPTION 'ERR102 Company account not found or inactive';
+            RAISE EXCEPTION 'ERR102: Company account not found or inactive';
         END IF;
         
         -- Calculate total batch amount
-        FOR v_payment_record IN SELECT  FROM jsonb_array_elements(p_payments)
+        FOR v_payment_record IN SELECT * FROM jsonb_array_elements(p_payments)
         LOOP
-            v_total_batch_amount = v_total_batch_amount + 
-                (v_payment_record-'amount')DECIMAL;
+            v_total_batch_amount := v_total_batch_amount + 
+                (v_payment_record->>'amount')::DECIMAL;
         END LOOP;
         
         -- Validate company balance
-        IF v_company_balance  v_total_batch_amount THEN
-            RAISE EXCEPTION 'ERR103 Insufficient company balance. Required %, Available %',
+        IF v_company_balance < v_total_batch_amount THEN
+            RAISE EXCEPTION 'ERR103: Insufficient company balance. Required: %, Available: %',
                            v_total_batch_amount, v_company_balance;
         END IF;
         
         -- Start main transaction
         BEGIN
             -- Process each payment
-            FOR v_payment_record IN SELECT  FROM jsonb_array_elements(p_payments)
+            FOR v_payment_record IN SELECT * FROM jsonb_array_elements(p_payments)
             LOOP
                 -- Extract payment details
-                v_payment_iin = v_payment_record-'iin';
-                v_payment_amount = (v_payment_record-'amount')DECIMAL;
-                v_payment_description = v_payment_record-'description';
+                v_payment_iin := v_payment_record->>'iin';
+                v_payment_amount := (v_payment_record->>'amount')::DECIMAL;
+                v_payment_description := v_payment_record->>'description';
                 
                 -- Set savepoint for each individual payment
                 SAVEPOINT individual_payment;
@@ -640,7 +639,7 @@ BEGIN
                         AND a.currency = 'KZT';
                     
                     IF v_employee_account_id IS NULL THEN
-                        RAISE EXCEPTION 'ERR104 Employee account not found for IIN %', v_payment_iin;
+                        RAISE EXCEPTION 'ERR104: Employee account not found for IIN: %', v_payment_iin;
                     END IF;
                     
                     -- Create salary transfer (bypassing daily limits via special handling)
@@ -658,15 +657,15 @@ BEGIN
                     SET balance = balance + v_payment_amount
                     WHERE account_id = v_employee_account_id;
                     
-                    v_successful = v_successful + 1;
+                    v_successful := v_successful + 1;
                     
                 EXCEPTION
                     WHEN OTHERS THEN
                         ROLLBACK TO SAVEPOINT individual_payment;
-                        v_failed = v_failed + 1;
+                        v_failed := v_failed + 1;
                         
                         -- Record failure details
-                        v_failed_json = v_failed_json  jsonb_build_object(
+                        v_failed_json := v_failed_json || jsonb_build_object(
                             'iin', v_payment_iin,
                             'amount', v_payment_amount,
                             'error', SQLERRM
@@ -690,13 +689,13 @@ BEGIN
                     ), 'process_salary_batch');
             
             -- Set output parameters
-            p_successful_count = v_successful;
-            p_failed_count = v_failed;
-            p_failed_details = v_failed_json;
+            p_successful_count := v_successful;
+            p_failed_count := v_failed;
+            p_failed_details := v_failed_json;
             
             COMMIT;
             
-            RAISE NOTICE 'Batch processing completed. Successful %, Failed %', 
+            RAISE NOTICE 'Batch processing completed. Successful: %, Failed: %', 
                         v_successful, v_failed;
                         
         EXCEPTION
@@ -721,10 +720,10 @@ $$;
 CREATE MATERIALIZED VIEW salary_batch_summary AS
 SELECT 
     DATE(b.changed_at) as processing_date,
-    b.new_values-'total_amount' as total_amount,
-    (b.new_values-'successful')INTEGER as successful_count,
-    (b.new_values-'failed')INTEGER as failed_count,
-    b.new_values-'failed_details' as failed_details,
+    b.new_values->>'total_amount' as total_amount,
+    (b.new_values->>'successful')::INTEGER as successful_count,
+    (b.new_values->>'failed')::INTEGER as failed_count,
+    b.new_values->'failed_details' as failed_details,
     b.changed_by as processed_by
 FROM audit_log b
 WHERE b.table_name = 'batch_processing'
@@ -735,10 +734,10 @@ ORDER BY b.changed_at DESC;
 CREATE INDEX idx_salary_batch_date ON salary_batch_summary(processing_date DESC);
 
 -- ============================================
--- PART 8 TEST CASES AND DEMONSTRATION
+-- PART 8: TEST CASES AND DEMONSTRATION (FIXED)
 -- ============================================
 
--- Test 1 Successful transfer
+-- Test 1: Successful transfer
 CALL process_transfer(
     'KZ12345678901234567890', 
     'KZ34567890123456789012', 
@@ -747,7 +746,7 @@ CALL process_transfer(
     'Test transfer 1'
 );
 
--- Test 2 Failed transfer - insufficient funds
+-- Test 2: Failed transfer - insufficient funds
 CALL process_transfer(
     'KZ34567890123456789012', 
     'KZ12345678901234567890', 
@@ -756,7 +755,7 @@ CALL process_transfer(
     'Should fail - insufficient funds'
 );
 
--- Test 3 Failed transfer - inactive account
+-- Test 3: Failed transfer - inactive account
 CALL process_transfer(
     'KZ45678901234567890123',  -- Inactive account
     'KZ12345678901234567890', 
@@ -765,7 +764,7 @@ CALL process_transfer(
     'Should fail - inactive account'
 );
 
--- Test 4 Currency conversion transfer
+-- Test 4: Currency conversion transfer
 CALL process_transfer(
     'KZ09876543210987654321',  -- USD account
     'KZ12345678901234567890',  -- KZT account
@@ -774,7 +773,7 @@ CALL process_transfer(
     'USD to KZT conversion'
 );
 
--- Test 5 Batch processing test
+-- Test 5: Batch processing test - FIXED: corrected JSON syntax
 DO $$
 DECLARE
     v_successful INTEGER;
@@ -784,123 +783,115 @@ BEGIN
     CALL process_salary_batch(
         'KZ12345678901234567890',
         '[
-            {iin 234567890123, amount 250000, description January Salary},
-            {iin 345678901234, amount 300000, description January Salary},
-            {iin 999999999999, amount 200000, description Invalid IIN}
-        ]'JSONB,
+            {"iin": "234567890123", "amount": 250000, "description": "January Salary"},
+            {"iin": "345678901234", "amount": 300000, "description": "January Salary"},
+            {"iin": "999999999999", "amount": 200000, "description": "Invalid IIN"}
+        ]'::JSONB,
         v_successful,
         v_failed,
         v_failed_details
     );
     
-    RAISE NOTICE 'Batch Results Successful %, Failed %', 
+    RAISE NOTICE 'Batch Results: Successful: %, Failed: %', 
                 v_successful, v_failed;
-    RAISE NOTICE 'Failed Details %', v_failed_details;
+    RAISE NOTICE 'Failed Details: %', v_failed_details;
 END $$;
 
--- Test 6 Concurrent transaction demonstration
--- Run these in two separate psql sessions
-
--- Session 1
--- BEGIN;
--- SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE;
--- -- Wait here
-
--- Session 2
--- BEGIN;
--- SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE NOWAIT;
--- -- This should fail or wait depending on Session 1
+-- Test 6: Concurrent transaction demonstration (commented instructions)
+-- Run these in two separate psql sessions:
+-- Session 1: BEGIN; SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE;
+-- Session 2: BEGIN; SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE NOWAIT;
 
 -- ============================================
--- PART 9 EXPLAIN ANALYZE EXAMPLES
+-- PART 9: EXPLAIN ANALYZE EXAMPLES (FIXED)
 -- ============================================
 
--- Example 1 Show index usage for customer lookup
+-- Example 1: Show index usage for customer lookup
 EXPLAIN ANALYZE
-SELECT  FROM customers 
+SELECT * FROM customers 
 WHERE LOWER(email) = 'aisultan@email.com';
 
--- Example 2 Show covering index usage
+-- Example 2: Show covering index usage
 EXPLAIN ANALYZE
 SELECT from_account_id, amount, currency
 FROM transactions
 WHERE from_account_id = 1 
     AND status = 'completed'
-    AND created_at = CURRENT_DATE - INTERVAL '30 days';
+    AND created_at >= CURRENT_DATE - INTERVAL '30 days';
 
--- Example 3 Show partial index usage
+-- Example 3: Show partial index usage
 EXPLAIN ANALYZE
 SELECT account_number, balance
 FROM accounts
 WHERE is_active = TRUE
-AND balance  1000000;
+AND balance > 1000000;
 
--- Example 4 Show JSONB index usage
+-- Example 4: Show JSONB index usage
 EXPLAIN ANALYZE
-SELECT  FROM audit_log
-WHERE old_values @ '{status active}'JSONB;
+SELECT * FROM audit_log
+WHERE old_values @> '{"status": "active"}'::JSONB;
 
--- Example 5 Show composite index usage
+-- Example 5: Show composite index usage
 EXPLAIN ANALYZE
-SELECT  FROM exchange_rates
+SELECT * FROM exchange_rates
 WHERE from_currency = 'USD' 
     AND to_currency = 'KZT'
     AND valid_to IS NULL;
 
 -- ============================================
--- PART 10 DOCUMENTATION
+-- PART 10: ДОКУМЕНТАЦИЯ (FIXED - как комментарии SQL)
 -- ============================================
 
+/*
+DESIGN DECISIONS AND JUSTIFICATIONS:
 
-DESIGN DECISIONS AND JUSTIFICATIONS
-
-1. TRANSACTION MANAGEMENT
+1. TRANSACTION MANAGEMENT:
    - Used FOR UPDATE locks to prevent race conditions
    - Implemented savepoints for partial rollback in currency conversion
    - All validations performed before balance updates
    - Comprehensive error handling with specific error codes
 
-2. INDEXING STRATEGY
-   - B-tree indexes Optimal for range queries and sorting (transactions by date)
-   - Hash index Faster for exact matches (phone number lookup)
-   - Covering index Includes frequently accessed columns to avoid table scans
-   - Partial index Reduces index size and improves performance for active accounts
-   - Expression index Enables case-insensitive searches without function overhead
-   - GIN index Efficient for JSONB querying operations
+2. INDEXING STRATEGY:
+   - B-tree indexes: Optimal for range queries and sorting (transactions by date)
+   - Hash index: Faster for exact matches (phone number lookup)
+   - Covering index: Includes frequently accessed columns to avoid table scans
+   - Partial index: Reduces index size and improves performance for active accounts
+   - Expression index: Enables case-insensitive searches without function overhead
+   - GIN index: Efficient for JSONB querying operations
 
-3. BATCH PROCESSING
+3. BATCH PROCESSING:
    - Advisory locks prevent concurrent processing for same company
    - Savepoints allow individual payment failures without aborting entire batch
    - Company balance updated atomically at the end
    - Materialized view provides efficient reporting
 
-4. SECURITY
+4. SECURITY:
    - SECURITY BARRIER views prevent information leakage
    - Input validation and parameterized queries prevent SQL injection
    - Audit logging tracks all changes for compliance
 
-5. PERFORMANCE OPTIMIZATIONS
+5. PERFORMANCE OPTIMIZATIONS:
    - Window functions used for running totals and rankings
    - Common Table Expressions (CTEs) improve query readability and performance
    - JSONB used for flexible data storage in audit logs
 
-CONCURRENCY HANDLING DEMONSTRATED
+CONCURRENCY HANDLING DEMONSTRATED:
 - Row-level locking with SELECT ... FOR UPDATE
 - Advisory locks for batch processing
 - Proper transaction isolation levels
 
-TESTING COVERAGE
+TESTING COVERAGE:
 - Successful transfers (same currency, cross-currency)
 - Failure scenarios (insufficient funds, inactive accounts, daily limits)
-- Batch processing with mixed successfailure
+- Batch processing with mixed success/failure
 - Concurrent access scenarios
-
+*/
 
 -- Refresh materialized view for reporting
 REFRESH MATERIALIZED VIEW salary_batch_summary;
 
 -- Display sample reports
-SELECT  FROM customer_balance_summary LIMIT 5;
-SELECT  FROM daily_transaction_report WHERE transaction_date = CURRENT_DATE - 7;
-SELECT  FROM suspicious_activity_view LIMIT 5;
-SELECT  FROM salary_batch_summary;
+SELECT * FROM customer_balance_summary LIMIT 5;
+SELECT * FROM daily_transaction_report WHERE transaction_date >= CURRENT_DATE - 7;
+SELECT * FROM suspicious_activity_view LIMIT 5;
+SELECT * FROM salary_batch_summary;
