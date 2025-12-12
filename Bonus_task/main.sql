@@ -26,7 +26,7 @@ CREATE TABLE customers (
     daily_limit_kzt DECIMAL(15,2) DEFAULT 1000000.00
 );
 
--- 2. accounts table - FIXED: changed CHECK (balance = 0) to CHECK (balance >= 0)
+-- 2. accounts table
 CREATE TABLE accounts (
     account_id SERIAL PRIMARY KEY,
     customer_id INTEGER REFERENCES customers(customer_id) ON DELETE CASCADE,
@@ -46,10 +46,10 @@ CREATE TABLE exchange_rates (
     rate DECIMAL(10,6) NOT NULL,
     valid_from TIMESTAMP NOT NULL,
     valid_to TIMESTAMP,
-    CHECK (from_currency != to_currency)
+    CHECK (from_currency <> to_currency)
 );
 
--- 4. transactions table - FIXED: changed CHECK (amount  0) to CHECK (amount > 0)
+-- 4. transactions table
 CREATE TABLE transactions (
     transaction_id SERIAL PRIMARY KEY,
     from_account_id INTEGER REFERENCES accounts(account_id),
@@ -110,7 +110,7 @@ INSERT INTO accounts (customer_id, account_number, currency, balance, is_active)
 (9, 'KZ90123456789012345678', 'KZT', 4000000.00, true),
 (10, 'KZ01234567890123456789', 'KZT', 2000000.00, true);
 
--- Insert exchange rates - FIXED: added : between time values
+-- Insert exchange rates
 INSERT INTO exchange_rates (from_currency, to_currency, rate, valid_from, valid_to) VALUES
 ('USD', 'KZT', 450.00, '2024-01-01 00:00:00', NULL),
 ('EUR', 'KZT', 500.00, '2024-01-01 00:00:00', NULL),
@@ -118,7 +118,10 @@ INSERT INTO exchange_rates (from_currency, to_currency, rate, valid_from, valid_
 ('KZT', 'USD', 0.002222, '2024-01-01 00:00:00', NULL),
 ('KZT', 'EUR', 0.002000, '2024-01-01 00:00:00', NULL),
 ('USD', 'EUR', 0.90, '2024-01-01 00:00:00', NULL),
-('EUR', 'USD', 1.11, '2024-01-01 00:00:00', NULL);
+('EUR', 'USD', 1.11, '2024-01-01 00:00:00', NULL),
+('USD', 'KZT', 455.00, '2024-02-01 00:00:00', '2024-02-28 23:59:59'),
+('EUR', 'KZT', 510.00, '2024-02-01 00:00:00', '2024-02-28 23:59:59'),
+('RUB', 'KZT', 5.50, '2024-02-01 00:00:00', '2024-02-28 23:59:59');
 
 -- Insert sample transactions
 INSERT INTO transactions (from_account_id, to_account_id, amount, currency, exchange_rate, amount_kzt, type, status, description) VALUES
@@ -126,7 +129,12 @@ INSERT INTO transactions (from_account_id, to_account_id, amount, currency, exch
 (2, 4, 1000.00, 'USD', 450.0, 450000.00, 'transfer', 'completed', 'International transfer'),
 (3, 5, 50000.00, 'KZT', 1.0, 50000.00, 'transfer', 'completed', 'Gift'),
 (NULL, 1, 200000.00, 'KZT', 1.0, 200000.00, 'deposit', 'completed', 'Cash deposit'),
-(5, NULL, 30000.00, 'KZT', 1.0, 30000.00, 'withdrawal', 'completed', 'ATM withdrawal');
+(5, NULL, 30000.00, 'KZT', 1.0, 30000.00, 'withdrawal', 'completed', 'ATM withdrawal'),
+(1, 6, 500.00, 'USD', 450.0, 225000.00, 'transfer', 'completed', 'Test transfer 2'),
+(3, 8, 100.00, 'EUR', 500.0, 50000.00, 'transfer', 'completed', 'Test transfer 3'),
+(5, 6, 50.00, 'USD', 450.0, 22500.00, 'transfer', 'completed', 'Test transfer 4'),
+(7, 8, 1000.00, 'EUR', 500.0, 500000.00, 'transfer', 'completed', 'Test transfer 5'),
+(9, 10, 20000.00, 'KZT', 1.0, 20000.00, 'transfer', 'completed', 'Test transfer 6');
 
 -- ============================================
 -- PART 3: AUDIT LOGGING TRIGGER
@@ -157,7 +165,7 @@ AFTER INSERT OR UPDATE OR DELETE ON accounts
 FOR EACH ROW EXECUTE FUNCTION audit_trigger_function();
 
 -- ============================================
--- PART 4: TASK 1 - TRANSACTION MANAGEMENT (FIXED SYNTAX)
+-- PART 4: TASK 1 - TRANSACTION MANAGEMENT
 -- ============================================
 
 CREATE OR REPLACE PROCEDURE process_transfer(
@@ -355,7 +363,7 @@ END;
 $$;
 
 -- ============================================
--- PART 5: TASK 2 - VIEWS FOR REPORTING (FIXED SYNTAX)
+-- PART 5: TASK 2 - VIEWS FOR REPORTING
 -- ============================================
 
 -- View 1: customer_balance_summary
@@ -526,7 +534,7 @@ SELECT
 FROM rapid_transfers rt;
 
 -- ============================================
--- PART 6: TASK 3 - PERFORMANCE OPTIMIZATION WITH INDEXES (FIXED)
+-- PART 6: TASK 3 - PERFORMANCE OPTIMIZATION WITH INDEXES
 -- ============================================
 
 -- 1. B-tree index on frequently queried columns
@@ -549,14 +557,14 @@ CREATE INDEX idx_accounts_active ON accounts(account_number, balance)
 -- 5. Expression index for case-insensitive email search
 CREATE INDEX idx_customers_email_lower ON customers(LOWER(email));
 
--- 6. GIN index on audit_log JSONB columns - FIXED: changed   to ||
+-- 6. GIN index on audit_log JSONB columns
 CREATE INDEX idx_audit_log_jsonb ON audit_log USING gin((old_values || new_values));
 
 -- 7. B-tree index for exchange rates lookup
 CREATE INDEX idx_exchange_rates_lookup ON exchange_rates(from_currency, to_currency, valid_to);
 
 -- ============================================
--- PART 7: TASK 4 - ADVANCED PROCEDURE: BATCH PROCESSING (FIXED)
+-- PART 7: TASK 4 - ADVANCED PROCEDURE: BATCH PROCESSING
 -- ============================================
 
 CREATE OR REPLACE PROCEDURE process_salary_batch(
@@ -734,7 +742,7 @@ ORDER BY b.changed_at DESC;
 CREATE INDEX idx_salary_batch_date ON salary_batch_summary(processing_date DESC);
 
 -- ============================================
--- PART 8: TEST CASES AND DEMONSTRATION (FIXED)
+-- PART 8: TEST CASES AND DEMONSTRATION
 -- ============================================
 
 -- Test 1: Successful transfer
@@ -773,7 +781,7 @@ CALL process_transfer(
     'USD to KZT conversion'
 );
 
--- Test 5: Batch processing test - FIXED: corrected JSON syntax
+-- Test 5: Batch processing test
 DO $$
 DECLARE
     v_successful INTEGER;
@@ -797,13 +805,8 @@ BEGIN
     RAISE NOTICE 'Failed Details: %', v_failed_details;
 END $$;
 
--- Test 6: Concurrent transaction demonstration (commented instructions)
--- Run these in two separate psql sessions:
--- Session 1: BEGIN; SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE;
--- Session 2: BEGIN; SELECT balance FROM accounts WHERE account_number = 'KZ12345678901234567890' FOR UPDATE NOWAIT;
-
 -- ============================================
--- PART 9: EXPLAIN ANALYZE EXAMPLES (FIXED)
+-- PART 9: EXPLAIN ANALYZE EXAMPLES
 -- ============================================
 
 -- Example 1: Show index usage for customer lookup
@@ -839,53 +842,8 @@ WHERE from_currency = 'USD'
     AND valid_to IS NULL;
 
 -- ============================================
--- PART 10: ДОКУМЕНТАЦИЯ (FIXED - как комментарии SQL)
+-- PART 10: ДОКУМЕНТАЦИЯ И ОТЧЕТЫ
 -- ============================================
-
-/*
-DESIGN DECISIONS AND JUSTIFICATIONS:
-
-1. TRANSACTION MANAGEMENT:
-   - Used FOR UPDATE locks to prevent race conditions
-   - Implemented savepoints for partial rollback in currency conversion
-   - All validations performed before balance updates
-   - Comprehensive error handling with specific error codes
-
-2. INDEXING STRATEGY:
-   - B-tree indexes: Optimal for range queries and sorting (transactions by date)
-   - Hash index: Faster for exact matches (phone number lookup)
-   - Covering index: Includes frequently accessed columns to avoid table scans
-   - Partial index: Reduces index size and improves performance for active accounts
-   - Expression index: Enables case-insensitive searches without function overhead
-   - GIN index: Efficient for JSONB querying operations
-
-3. BATCH PROCESSING:
-   - Advisory locks prevent concurrent processing for same company
-   - Savepoints allow individual payment failures without aborting entire batch
-   - Company balance updated atomically at the end
-   - Materialized view provides efficient reporting
-
-4. SECURITY:
-   - SECURITY BARRIER views prevent information leakage
-   - Input validation and parameterized queries prevent SQL injection
-   - Audit logging tracks all changes for compliance
-
-5. PERFORMANCE OPTIMIZATIONS:
-   - Window functions used for running totals and rankings
-   - Common Table Expressions (CTEs) improve query readability and performance
-   - JSONB used for flexible data storage in audit logs
-
-CONCURRENCY HANDLING DEMONSTRATED:
-- Row-level locking with SELECT ... FOR UPDATE
-- Advisory locks for batch processing
-- Proper transaction isolation levels
-
-TESTING COVERAGE:
-- Successful transfers (same currency, cross-currency)
-- Failure scenarios (insufficient funds, inactive accounts, daily limits)
-- Batch processing with mixed success/failure
-- Concurrent access scenarios
-*/
 
 -- Refresh materialized view for reporting
 REFRESH MATERIALIZED VIEW salary_batch_summary;
